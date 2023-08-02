@@ -1,4 +1,6 @@
 import io
+import json
+import sys
 
 import httpx
 from invoke import task
@@ -8,12 +10,10 @@ DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
 
 def require_protocol(url: str):
-    if not url.startswith("http"):
-        return f"https://{url}"
-    return url
+    return url if url.startswith(("http://", "https://")) else f"https://{url}"
 
 
-@task(aliases=("add",))
+@task(aliases=("add", "send"))
 def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, max_days=None, encrypt=None):
     """
     Upload a file.
@@ -41,21 +41,30 @@ def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, ma
 
         response = session.post(url, files=file, headers=headers)
 
+        download_url = response.text.strip()
+        delete_url = response.headers.get('x-url-delete')
+
         print(
-            {
-                "status": response.status_code,
-                "url": response.text.strip(),
-                "delete": response.headers.get('x-url-delete'),
-            }
+            json.dumps(
+                {
+                    "status": response.status_code,
+                    "url": download_url,
+                    "delete": delete_url,
+                    "download_command": f"edwh file.download {download_url}",
+                    "delete_command": f"edwh file.delete {delete_url}",
+                },
+                indent=2,
+            ),
         )
 
 
-@task(aliases=("get",))
+@task(aliases=("get", "receive"))
 def download(_, download_url, output_file=None, decrypt=None):
     """
     Download a file.
 
     Args:
+        _ (Context)
         download_url (str): file to download
         output_file (str): path to store the file in
         decrypt (str): decryption token
@@ -71,7 +80,7 @@ def download(_, download_url, output_file=None, decrypt=None):
 
     with httpx.Client() as session, session.stream("GET", download_url, headers=headers) as response:
         if response.status_code >= 400:
-            print("[red] Something went wrong: [/red]", response.status_code, response.read().decode())
+            print("[red] Something went wrong: [/red]", response.status_code, response.read().decode(), file=sys.stderr)
             return
 
         total = int(response.headers["Content-Length"])
@@ -96,6 +105,7 @@ def delete(_, deletion_url):
     Delete an uploaded file.
 
     Args:
+        _ (Context)
         deletion_url (str): File url + deletion token (from `x-url-delete`, shown in file.upload output)
     """
     deletion_url = require_protocol(deletion_url)
