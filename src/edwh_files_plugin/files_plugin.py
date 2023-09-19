@@ -1,8 +1,7 @@
-import io
 import json
 import sys
 
-import httpx
+import requests
 from invoke import task
 from rich import print, progress
 
@@ -34,12 +33,12 @@ def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, ma
     if encrypt:
         headers["X-Encrypt-Password"] = encrypt
 
-    with httpx.Client() as session, open(filename, "rb") as f:
+    with open(filename, "rb") as f:
         file = {filename: f}
 
         url = require_protocol(server)
 
-        response = session.post(url, files=file, headers=headers)
+        response = requests.post(url, files=file, headers=headers)
 
         download_url = response.text.strip()
         delete_url = response.headers.get('x-url-delete')
@@ -78,25 +77,27 @@ def download(_, download_url, output_file=None, decrypt=None):
     if decrypt:
         headers["X-Decrypt-Password"] = decrypt
 
-    with httpx.Client() as session, session.stream("GET", download_url, headers=headers) as response:
-        if response.status_code >= 400:
-            print("[red] Something went wrong: [/red]", response.status_code, response.read().decode(), file=sys.stderr)
-            return
+    response = requests.get(download_url, headers=headers, stream=True)
+    if response.status_code >= 400:
+        print("[red] Something went wrong: [/red]", response.status_code, response.content.decode(), file=sys.stderr)
+        return
 
-        total = int(response.headers["Content-Length"])
-        with (
-            open(output_file, "wb") as f,  # <- open file when we're sure the status code is successful!
-            progress.Progress(
-                "[progress.percentage]{task.percentage:>3.0f}%",
-                progress.BarColumn(bar_width=None),
-                progress.DownloadColumn(),
-                progress.TransferSpeedColumn(),
-            ) as progress_bar,
-        ):
-            download_task = progress_bar.add_task("Download", total=total)
-            for chunk in response.iter_bytes():
-                f.write(chunk)
-                progress_bar.update(download_task, completed=response.num_bytes_downloaded)
+    total = int(response.headers["Content-Length"])
+    with (
+        open(output_file, "wb") as f,  # <- open file when we're sure the status code is successful!
+        progress.Progress(
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            progress.BarColumn(bar_width=None),
+            progress.DownloadColumn(),
+            progress.TransferSpeedColumn(),
+        ) as progress_bar,
+    ):
+        bytes_downloaded = 0
+        download_task = progress_bar.add_task("Download", total=total)
+        for chunk in response.iter_content():
+            bytes_downloaded += len(chunk)
+            f.write(chunk)
+            progress_bar.update(download_task, completed=bytes_downloaded)
 
 
 @task(aliases=("remove",))
@@ -110,12 +111,11 @@ def delete(_, deletion_url):
     """
     deletion_url = require_protocol(deletion_url)
 
-    with httpx.Client() as session:
-        response = session.delete(deletion_url)
+    response = requests.delete(deletion_url)
 
-        print(
-            {
-                "status": response.status_code,
-                "response": response.text.strip(),
-            }
-        )
+    print(
+        {
+            "status": response.status_code,
+            "response": response.text.strip(),
+        }
+    )
