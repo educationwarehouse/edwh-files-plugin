@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
   'requests',
-  'rich',
+  'progress',
   'yarl',
 ]
 

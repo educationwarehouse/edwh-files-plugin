@@ -3,7 +3,12 @@ import sys
 
 import requests
 from invoke import task
-from rich import print, progress
+
+from rich import print
+
+# rich.progress is fancier but much slower (100ms import)
+# so use simpler progress library (also used by pip, before rich):
+from progress.bar import ChargingBar
 
 DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
@@ -83,21 +88,9 @@ def download(_, download_url, output_file=None, decrypt=None):
         return
 
     total = int(response.headers["Content-Length"])
-    with (
-        open(output_file, "wb") as f,  # <- open file when we're sure the status code is successful!
-        progress.Progress(
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            progress.BarColumn(bar_width=None),
-            progress.DownloadColumn(),
-            progress.TransferSpeedColumn(),
-        ) as progress_bar,
-    ):
-        bytes_downloaded = 0
-        download_task = progress_bar.add_task("Download", total=total)
-        for chunk in response.iter_content():
-            bytes_downloaded += len(chunk)
+    with (open(output_file, "wb") as f,):  # <- open file when we're sure the status code is successful!
+        for chunk in ChargingBar('Processing', max=total).iter(response.iter_content()):
             f.write(chunk)
-            progress_bar.update(download_task, completed=bytes_downloaded)
 
 
 @task(aliases=("remove",))
