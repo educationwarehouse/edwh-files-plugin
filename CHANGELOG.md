@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.1.3 (2023-09-19)
+### Performance
+* Replaced rich.progress with simpler progress.Bar ([`e874297`](https://github.com/educationwarehouse/edwh-files-plugin/commit/e8742972bd6dfd3476b23a3fe14aa43fa1bda4f8))
+
 ## v0.1.2 (2023-09-19)
 ### Performance
 * **httpx:** Replaced httpx with requests because the import was very slow (150ms) ([`b7f21c9`](https://github.com/educationwarehouse/edwh-files-plugin/commit/b7f21c968e3aa52989a88888dbfabded88a89e7d))
