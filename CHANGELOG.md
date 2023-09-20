@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.1.4 (2023-09-20)
+### Fix
+* Re-add rich as dependency ([`dc6037a`](https://github.com/educationwarehouse/edwh-files-plugin/commit/dc6037ac03f6c897763ccf3d90ec6ecef9b5f525))
+
 ## v0.1.3 (2023-09-19)
 ### Performance
 * Replaced rich.progress with simpler progress.Bar ([`e874297`](https://github.com/educationwarehouse/edwh-files-plugin/commit/e8742972bd6dfd3476b23a3fe14aa43fa1bda4f8))
