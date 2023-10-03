@@ -83,13 +83,14 @@ def download(_, download_url, output_file=None, decrypt=None):
         headers["X-Decrypt-Password"] = decrypt
 
     response = requests.get(download_url, headers=headers, stream=True)
+
     if response.status_code >= 400:
         print("[red] Something went wrong: [/red]", response.status_code, response.content.decode(), file=sys.stderr)
         return
 
-    total = int(response.headers["Content-Length"])
+    total = int(response.headers["Content-Length"]) // 1024
     with (open(output_file, "wb") as f,):  # <- open file when we're sure the status code is successful!
-        for chunk in ChargingBar('Processing', max=total).iter(response.iter_content()):
+        for chunk in ChargingBar('Downloading', max=total).iter(response.iter_content(chunk_size=1024)):
             f.write(chunk)
 
 
