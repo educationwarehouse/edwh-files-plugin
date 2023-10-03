@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.1.5 (2023-10-03)
+### Fix
+* **download:** Progress bar was unresponsive, now it works again ([`57283b4`](https://github.com/educationwarehouse/edwh-files-plugin/commit/57283b491f89dcd97956ac5d29cbb0074776e961))
+
 ## v0.1.4 (2023-09-20)
 ### Fix
 * Re-add rich as dependency ([`dc6037a`](https://github.com/educationwarehouse/edwh-files-plugin/commit/dc6037ac03f6c897763ccf3d90ec6ecef9b5f525))
