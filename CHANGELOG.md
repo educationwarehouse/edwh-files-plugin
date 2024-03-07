@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.2.0 (2024-03-07)
+
+### Feature
+
+* **upload:** Allow sending (zipped) directories ([`ea59803`](https://github.com/educationwarehouse/edwh-files-plugin/commit/ea59803fc417b965d19fa6acb5cba81eec9d3916))
+
 ## v0.1.5 (2023-10-03)
 ### Fix
 * **download:** Progress bar was unresponsive, now it works again ([`57283b4`](https://github.com/educationwarehouse/edwh-files-plugin/commit/57283b491f89dcd97956ac5d29cbb0074776e961))
