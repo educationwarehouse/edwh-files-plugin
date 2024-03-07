@@ -1,20 +1,50 @@
 import json
+import shutil
 import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
 
 import requests
 from invoke import task
 
-from rich import print
-
 # rich.progress is fancier but much slower (100ms import)
 # so use simpler progress library (also used by pip, before rich):
 from progress.bar import ChargingBar
+from rich import print
 
 DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
 
 def require_protocol(url: str):
+    """
+    Make sure 'url' has an HTTP or HTTPS schema.
+    """
     return url if url.startswith(("http://", "https://")) else f"https://{url}"
+
+
+def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
+    """
+    Upload a file to an url.
+    """
+    if headers is None:
+        headers = {}
+
+    with filepath.open('rb') as f:
+        file = {filename: f}
+        return requests.post(url, files=file, headers=headers)
+
+
+def upload_directory(url: str, filepath: Path, headers: Optional[dict] = None):
+    """
+    Zip a directory and upload it to an url.
+    """
+    filename = filepath.resolve().name
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_path = shutil.make_archive(str(Path(tmpdir) / filename), 'zip', filepath)
+
+        return upload_file(url, f"{filename}.zip", Path(archive_path), headers=headers)
 
 
 @task(aliases=("add", "send"))
@@ -38,28 +68,30 @@ def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, ma
     if encrypt:
         headers["X-Encrypt-Password"] = encrypt
 
-    with open(filename, "rb") as f:
-        file = {filename: f}
+    url = require_protocol(server)
 
-        url = require_protocol(server)
+    filepath = Path(filename)
 
-        response = requests.post(url, files=file, headers=headers)
+    if filepath.is_dir():
+        response = upload_directory(url, filepath, headers)
+    else:
+        response = upload_file(url, filename, filepath, headers)
 
-        download_url = response.text.strip()
-        delete_url = response.headers.get('x-url-delete')
+    download_url = response.text.strip()
+    delete_url = response.headers.get('x-url-delete')
 
-        print(
-            json.dumps(
-                {
-                    "status": response.status_code,
-                    "url": download_url,
-                    "delete": delete_url,
-                    "download_command": f"edwh file.download {download_url}",
-                    "delete_command": f"edwh file.delete {delete_url}",
-                },
-                indent=2,
-            ),
-        )
+    print(
+        json.dumps(
+            {
+                "status": response.status_code,
+                "url": download_url,
+                "delete": delete_url,
+                "download_command": f"edwh file.download {download_url}",
+                "delete_command": f"edwh file.delete {delete_url}",
+            },
+            indent=2,
+        ),
+    )
 
 
 @task(aliases=("get", "receive"))
