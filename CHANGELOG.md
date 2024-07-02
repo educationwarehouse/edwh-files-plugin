@@ -2,6 +2,13 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.0 (2024-07-02)
+
+### Feature
+
+* Use `requests_toolbelt` to also show progress bar for upload ([`f0880c7`](https://github.com/educationwarehouse/edwh-files-plugin/commit/f0880c75a166594dbd75c97b359661e403053ed3))
+* Show spinning animation on slow tasks where progress bar isn't really possible (zip, upload) ([`b6d4ac7`](https://github.com/educationwarehouse/edwh-files-plugin/commit/b6d4ac7607c75bba5e32c2d9f28cfe70bbef51c3))
+
 ## v0.2.0 (2024-03-07)
 
 ### Feature
