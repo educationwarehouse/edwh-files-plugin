@@ -28,6 +28,7 @@ dependencies = [
   'rich',
   'progress',
   'yarl',
+  'threadful',
 ]
 
 [project.optional-dependencies]

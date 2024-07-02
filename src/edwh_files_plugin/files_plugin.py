@@ -12,6 +12,8 @@ from invoke import task
 # so use simpler progress library (also used by pip, before rich):
 from progress.bar import ChargingBar
 from rich import print
+from threadful import thread
+from threadful.bonus import animate
 
 DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
@@ -23,7 +25,8 @@ def require_protocol(url: str):
     return url if url.startswith(("http://", "https://")) else f"https://{url}"
 
 
-def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
+@thread()
+def _upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
     """
     Upload a file to an url.
     """
@@ -35,6 +38,30 @@ def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict]
         return requests.post(url, files=file, headers=headers)
 
 
+def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
+    """
+    Upload a file to an url and show a spinning animation.
+    """
+    promise = _upload_file(url, filename=filename, filepath=filepath, headers=headers)
+
+    return animate(promise, text="Uploading...")
+
+
+@thread()
+def _zip_directory(dir_path: str | Path, file_path: str | Path):
+    """
+    Compress a directory into a .zip file.
+    """
+    return shutil.make_archive(str(file_path), 'zip', str(dir_path))
+
+
+def zip_directory(dir_path: str | Path, file_path: str | Path):
+    """
+    Compress a directory into a .zip file and show a spinning animation.
+    """
+    return animate(_zip_directory(dir_path, file_path), text=f"Zipping directory {dir_path}")
+
+
 def upload_directory(url: str, filepath: Path, headers: Optional[dict] = None):
     """
     Zip a directory and upload it to an url.
@@ -42,7 +69,7 @@ def upload_directory(url: str, filepath: Path, headers: Optional[dict] = None):
     filename = filepath.resolve().name
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        archive_path = shutil.make_archive(str(Path(tmpdir) / filename), 'zip', filepath)
+        archive_path = zip_directory(filepath, Path(tmpdir) / filename)
 
         return upload_file(url, f"{filename}.zip", Path(archive_path), headers=headers)
 
