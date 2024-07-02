@@ -11,6 +11,7 @@ from invoke import task
 # rich.progress is fancier but much slower (100ms import)
 # so use simpler progress library (also used by pip, before rich):
 from progress.bar import ChargingBar
+from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncoderMonitor
 from rich import print
 from threadful import thread
 from threadful.bonus import animate
@@ -25,8 +26,17 @@ def require_protocol(url: str):
     return url if url.startswith(("http://", "https://")) else f"https://{url}"
 
 
-@thread()
-def _upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
+def create_callback(encoder: MultipartEncoder):
+    bar = ChargingBar("Uploading", max=encoder.len)
+
+    def callback(monitor: MultipartEncoderMonitor):
+        # goto instead of next because chunk size is unknown
+        bar.goto(monitor.bytes_read)
+
+    return callback
+
+
+def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
     """
     Upload a file to an url.
     """
@@ -34,17 +44,15 @@ def _upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict
         headers = {}
 
     with filepath.open('rb') as f:
-        file = {filename: f}
-        return requests.post(url, files=file, headers=headers)
+        encoder = MultipartEncoder(
+            fields={
+                filename: (filename, f, 'text/plain'),
+            }
+        )
 
+        monitor = MultipartEncoderMonitor(encoder, create_callback(encoder))
 
-def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
-    """
-    Upload a file to an url and show a spinning animation.
-    """
-    promise = _upload_file(url, filename=filename, filepath=filepath, headers=headers)
-
-    return animate(promise, text="Uploading...")
+        return requests.post(url, data=monitor, headers=headers | {"Content-Type": monitor.content_type})
 
 
 @thread()
