@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.1 (2024-07-18)
+
+### Fix
+
+* Improved type hints, code style etc ([`1bb1c45`](https://github.com/educationwarehouse/edwh-files-plugin/commit/1bb1c451d8e8ad1fe5b918adbbe022939580d878))
+
 ## v0.3.0 (2024-07-02)
 
 ### Feature
