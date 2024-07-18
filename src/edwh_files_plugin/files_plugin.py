@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-from invoke import task
+from invoke import Context, task
 
 # rich.progress is fancier but much slower (100ms import)
 # so use simpler progress library (also used by pip, before rich):
@@ -43,16 +43,16 @@ def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict]
     if headers is None:
         headers = {}
 
-    with filepath.open('rb') as f:
+    with filepath.open("rb") as f:
         encoder = MultipartEncoder(
             fields={
-                filename: (filename, f, 'text/plain'),
+                filename: (filename, f, "text/plain"),
             }
         )
 
         monitor = MultipartEncoderMonitor(encoder, create_callback(encoder))
 
-        return requests.post(url, data=monitor, headers=headers | {"Content-Type": monitor.content_type})
+        return requests.post(url, data=monitor, headers=headers | {"Content-Type": monitor.content_type})  # noqa
 
 
 @thread()
@@ -60,7 +60,7 @@ def _zip_directory(dir_path: str | Path, file_path: str | Path):
     """
     Compress a directory into a .zip file.
     """
-    return shutil.make_archive(str(file_path), 'zip', str(dir_path))
+    return shutil.make_archive(str(file_path), "zip", str(dir_path))
 
 
 def zip_directory(dir_path: str | Path, file_path: str | Path):
@@ -83,18 +83,26 @@ def upload_directory(url: str, filepath: Path, headers: Optional[dict] = None):
 
 
 @task(aliases=("add", "send"))
-def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, max_days=None, encrypt=None):
+def upload(
+    _: Context,
+    filename: str | Path,
+    server: str = DEFAULT_TRANSFERSH_SERVER,
+    max_downloads: Optional[int] = None,
+    max_days: Optional[int] = None,
+    encrypt: Optional[str] = None,
+):
     """
     Upload a file.
 
     Args:
+        _: invoke Context
         filename (str): path to the file to upload
         server (str): which transfer.sh server to use
         max_downloads (int): how often can the file be downloaded?
         max_days (int): how many days can the file be downloaded?
         encrypt (str): encryption password
     """
-    headers = {}
+    headers: dict[str, str | int] = {}
 
     if max_downloads:
         headers["Max-Downloads"] = max_downloads
@@ -110,10 +118,10 @@ def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, ma
     if filepath.is_dir():
         response = upload_directory(url, filepath, headers)
     else:
-        response = upload_file(url, filename, filepath, headers)
+        response = upload_file(url, str(filename), filepath, headers)
 
     download_url = response.text.strip()
-    delete_url = response.headers.get('x-url-delete')
+    delete_url = response.headers.get("x-url-delete")
 
     print(
         json.dumps(
@@ -130,7 +138,7 @@ def upload(_, filename, server=DEFAULT_TRANSFERSH_SERVER, max_downloads=None, ma
 
 
 @task(aliases=("get", "receive"))
-def download(_, download_url, output_file=None, decrypt=None):
+def download(_: Context, download_url: str, output_file: Optional[str | Path] = None, decrypt: Optional[str] = None):
     """
     Download a file.
 
@@ -149,7 +157,7 @@ def download(_, download_url, output_file=None, decrypt=None):
     if decrypt:
         headers["X-Decrypt-Password"] = decrypt
 
-    response = requests.get(download_url, headers=headers, stream=True)
+    response = requests.get(download_url, headers=headers, stream=True)  # noqa
 
     if response.status_code >= 400:
         print("[red] Something went wrong: [/red]", response.status_code, response.content.decode(), file=sys.stderr)
@@ -157,12 +165,12 @@ def download(_, download_url, output_file=None, decrypt=None):
 
     total = int(response.headers["Content-Length"]) // 1024
     with (open(output_file, "wb") as f,):  # <- open file when we're sure the status code is successful!
-        for chunk in ChargingBar('Downloading', max=total).iter(response.iter_content(chunk_size=1024)):
+        for chunk in ChargingBar("Downloading", max=total).iter(response.iter_content(chunk_size=1024)):
             f.write(chunk)
 
 
 @task(aliases=("remove",))
-def delete(_, deletion_url):
+def delete(_: Context, deletion_url: str):
     """
     Delete an uploaded file.
 
@@ -172,7 +180,7 @@ def delete(_, deletion_url):
     """
     deletion_url = require_protocol(deletion_url)
 
-    response = requests.delete(deletion_url)
+    response = requests.delete(deletion_url, timeout=15)
 
     print(
         {
