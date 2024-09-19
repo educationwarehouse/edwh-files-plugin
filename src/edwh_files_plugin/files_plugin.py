@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-from invoke import Context, task
+from edwh import improved_task as task
+from invoke import Context
 
 # rich.progress is fancier but much slower (100ms import)
 # so use simpler progress library (also used by pip, before rich):
@@ -70,16 +71,37 @@ def zip_directory(dir_path: str | Path, file_path: str | Path):
     return animate(_zip_directory(dir_path, file_path), text=f"Zipping directory {dir_path}")
 
 
-def upload_directory(url: str, filepath: Path, headers: Optional[dict] = None):
+def find_best_available_compression() -> str:
+    ...
+
+
+def upload_directory(
+    url: str,
+    filepath: Path,
+    headers: Optional[dict] = None,
+    upload_filename: Optional[str] = None,
+    compression: Optional[str] = None,
+):
     """
     Zip a directory and upload it to an url.
+
+    Args:
+        url: which transfer.sh server to use
+        filepath: which directory to upload
+        headers: upload options
+        upload_filename: by default, the directory name with compression extension (e.g. .gz, .zip) will be used
+        compression: which method for compression to use (or best available by default)
     """
+    compression = compression or find_best_available_compression()
+
     filename = filepath.resolve().name
+    upload_filename = upload_filename or f"{filename}.zip"
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # todo: use different options from 'compression'
         archive_path = zip_directory(filepath, Path(tmpdir) / filename)
 
-        return upload_file(url, f"{filename}.zip", Path(archive_path), headers=headers)
+        return upload_file(url, upload_filename, Path(archive_path), headers=headers)
 
 
 @task(aliases=("add", "send"))
@@ -90,6 +112,8 @@ def upload(
     max_downloads: Optional[int] = None,
     max_days: Optional[int] = None,
     encrypt: Optional[str] = None,
+    rename: Optional[str] = None,
+    compression: Optional[str] = None,
 ):
     """
     Upload a file.
@@ -101,6 +125,9 @@ def upload(
         max_downloads (int): how often can the file be downloaded?
         max_days (int): how many days can the file be downloaded?
         encrypt (str): encryption password
+        rename (str): upload the file/folder with a different name than it currently has
+        compression (str): by default files are not compressed. For folders it will try pigz (.gz), gzip (.gz) then .zip.
+                           You can also explicitly specify a compression method for files and directory, and nothing else will be tried.
     """
     headers: dict[str, str | int] = {}
 
@@ -116,9 +143,9 @@ def upload(
     filepath = Path(filename)
 
     if filepath.is_dir():
-        response = upload_directory(url, filepath, headers)
+        response = upload_directory(url, filepath, headers, upload_filename=rename, compression=compression)
     else:
-        response = upload_file(url, str(filename), filepath, headers)
+        response = upload_file(url, rename or str(filename), filepath, headers, compression=compression)
 
     download_url = response.text.strip()
     delete_url = response.headers.get("x-url-delete")
@@ -136,7 +163,6 @@ def upload(
         ),
     )
 
-
 @task(aliases=("get", "receive"))
 def download(_: Context, download_url: str, output_file: Optional[str | Path] = None, decrypt: Optional[str] = None):
     """
@@ -148,6 +174,9 @@ def download(_: Context, download_url: str, output_file: Optional[str | Path] = 
         output_file (str): path to store the file in
         decrypt (str): decryption token
     """
+
+    # todo: add decompress option (pigz/gz/zip/auto/none) or ask
+
     if output_file is None:
         output_file = download_url.split("/")[-1]
 
