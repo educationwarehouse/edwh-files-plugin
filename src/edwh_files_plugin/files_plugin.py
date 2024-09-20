@@ -71,8 +71,7 @@ def zip_directory(dir_path: str | Path, file_path: str | Path):
     return animate(_zip_directory(dir_path, file_path), text=f"Zipping directory {dir_path}")
 
 
-def find_best_available_compression() -> str:
-    ...
+def find_best_available_compression() -> str: ...
 
 
 def upload_directory(
@@ -162,6 +161,7 @@ def upload(
             indent=2,
         ),
     )
+
 
 @task(aliases=("get", "receive"))
 def download(_: Context, download_url: str, output_file: Optional[str | Path] = None, decrypt: Optional[str] = None):
