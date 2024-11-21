@@ -25,11 +25,10 @@ classifiers = [
 ]
 dependencies = [
     'requests',
+    'requests_toolbelt',
     'rich',
     'progress',
-    'yarl',
     'threadful',
-    'requests_toolbelt',
 ]
 
 [project.optional-dependencies]
