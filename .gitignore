@@ -1,5 +1,6 @@
 *.pyc
 .idea
+.env
 venv*
 dist/
 build/

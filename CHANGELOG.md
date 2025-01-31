@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.2 (2024-11-21)
+
+### Fix
+
+* Remove unused `yarl` dependency ([`10df86c`](https://github.com/educationwarehouse/edwh-files-plugin/commit/10df86c9a59d91dab00132745261a49d91665f9c))
+
 ## v0.3.1 (2024-07-18)
 
 ### Fix
