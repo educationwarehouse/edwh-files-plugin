@@ -193,7 +193,9 @@ def download(_: Context, download_url: str, output_file: Optional[str | Path] = 
         return
 
     total = int(response.headers["Content-Length"]) // 1024
-    with (open(output_file, "wb") as f,):  # <- open file when we're sure the status code is successful!
+    with (
+        open(output_file, "wb") as f,
+    ):  # <- open file when we're sure the status code is successful!
         for chunk in ChargingBar("Downloading", max=total).iter(response.iter_content(chunk_size=1024)):
             f.write(chunk)
 

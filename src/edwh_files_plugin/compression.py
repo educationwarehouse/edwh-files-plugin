@@ -6,6 +6,9 @@ from pathlib import Path
 from subprocess import run
 from typing import Self
 
+from plumbum import local
+from plumbum.commands.processes import CommandNotFound
+
 PathLike: typing.TypeAlias = str | Path
 
 DEFAULT_COMPRESSION_LEVEL = 5
@@ -25,7 +28,7 @@ def is_installed(program: str) -> bool:
 
 
 class Compression(abc.ABC):
-    _registrations = {}
+    _registrations: dict[tuple[int, str], typing.Type[Self]] = {}
 
     def __init_subclass__(cls, extension: str = "", prio: int = 0):
         if not extension:
@@ -78,8 +81,9 @@ class Compression(abc.ABC):
             overwrite=overwrite,
         )
 
+    @classmethod
     @abc.abstractmethod
-    def is_available(self) -> bool:
+    def is_available(cls) -> bool:
         """
         Checks if the required compression tool is available.
 
@@ -88,16 +92,37 @@ class Compression(abc.ABC):
         """
 
     @classmethod
-    def best(cls) -> Self:
-        return Zip()
+    def registrations(cls, extension_filter: str = None) -> list[tuple[tuple[int, str], typing.Type["Compression"]]]:
+        return sorted(
+            (
+                (key, CompressionClass)
+                for (key, CompressionClass) in cls._registrations.items()
+                if CompressionClass.is_available() and extension_filter in (None, key[1])
+            ),
+            key=lambda registration: registration[0],
+            reverse=True,
+        )
 
     @classmethod
-    def for_extension(cls, extension: str) -> Self:
-        return Zip()
+    def best(cls) -> Self | None:
+        """
+        Find the absolute best (by priority) available compression method.
+        """
+        if registrations := cls.registrations():
+            CompressionClass = registrations[0][1]
+            return CompressionClass()
+
+    @classmethod
+    def for_extension(cls, extension: str) -> Self | None:
+        """
+        Find the best (by priority) available compression method for a specific extension (zip, gz).
+        """
+        if registrations := cls.registrations(extension):
+            CompressionClass = registrations[0][1]
+            return CompressionClass()
 
 
 class Zip(Compression, extension="zip"):
-
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
@@ -169,7 +194,8 @@ class Zip(Compression, extension="zip"):
 
         return True
 
-    def is_available(self) -> bool:
+    @classmethod
+    def is_available(cls) -> bool:
         try:
             import zipfile
 
@@ -178,74 +204,96 @@ class Zip(Compression, extension="zip"):
             return False
 
 
-class Noop(Compression): ...
+class Gzip(Compression, extension="gz", prio=1):
+    def gzip_compress(
+        self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar="tar", _gzip="gzip"
+    ):
+        tar = local[_tar]
+        gzip = local[_gzip]
 
+        if source.is_dir():
+            # .tar.gz
+            # cmd = tar["-cf", "-", source] | gzip[f"-{level}"] > str(target)
+            # ↑ stores whole path in tar; ↓ stores only folder name
+            cmd = tar["-cf", "-", "-C", source.parent, source.name] | gzip[f"-{level}"] > str(target)
+        else:
+            cmd = gzip[f"-{level}", "-c", source] > str(target)
 
-class Pigz(Compression, extension="gz", prio=2):
+        cmd()
+        return True
+
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
-        if source.is_dir():
-            result = os.system(f"tar -{level} -cf - {source} | pigz > {target}")  # .tar.gz
-        else:
-            result = os.system(f"pigz -{level} -c {source} > {target}")  # .gz
+        if target.exists() and not overwrite:
+            return False
 
-        return result == 0
+        try:
+            self.gzip_compress(source, target, level=level)
+            return True
+        except Exception:
+            return False
+
+    def gzip_decompress(self, source: Path, target: Path, _tar="tar", _gunzip="gunzip"):
+        gunzip = local[_gunzip]
+        tar = local[_tar]
+
+        if ".tar" in source.suffixes or ".tgz" in source.suffixes:
+            # tar gz
+            target.mkdir(parents=True, exist_ok=True)
+            cmd = tar[f"-xvf", source, "--strip-components=1", f"--use-compress-program={_gunzip}", "-C", target]
+        else:
+            # assume just a .gz
+            cmd = gunzip[f"-c", source] > str(target)
+
+        cmd()
 
     def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
-        os.system("unpigz -c input_file.gz > output_file")  # from .gz
-        os.system(
-            "tar -xvf input_file.tar.gz --use-compress-program=unpigz -C /path/to/output_directory"
-        )  # from .tar.gz
+        if target.exists() and not overwrite:
+            return False
 
-    def is_available(self) -> bool:
-        return is_installed("pigz")
+        try:
+            self.gzip_decompress(source, target)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def is_available(cls) -> bool:
+        try:
+            assert local["gzip"] and local["gunzip"]
+            return True
+        except CommandNotFound:
+            return False
 
 
-if __name__ == "__main__":
-    z = Pigz()
+class Pigz(Gzip, extension="gz", prio=2):
+    def _compress(
+        self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
+    ) -> bool:
+        if target.exists() and not overwrite:
+            return False
 
-    assert z.is_available()
+        try:
+            self.gzip_compress(source, target, _gzip="pigz")
+            return True
+        except Exception:
+            return False
 
-    bf1 = Path("/tmp/bigfile.txt")
+    def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
+        if target.exists() and not overwrite:
+            return False
 
-    if not bf1.exists():
-        with bf1.open("w") as f:
-            f.write("x" * int(1e9))
+        try:
+            self.gzip_decompress(source, target, _gunzip="unpigz")
+            return True
+        except Exception:
+            return False
 
-    assert z.compress("/tmp/bigfile.txt", "/tmp/bigfile.txt.gz")
-    assert z.decompress("/tmp/bigfile.txt.gz", "/tmp/bigfile.txt2")
-    bf2 = Path("/tmp/bigfile.txt2")
-    assert bf2.exists() and bf2.is_file()
-    assert z.compress(".", "/tmp/thisdir.gz", level=9)
-
-    tmp = Path("/tmp/thisdir")
-    assert z.decompress("/tmp/thisdir.gz", tmp)
-    assert tmp.exists() and tmp.is_dir()
-
-    print("hurray")
-
-# if __name__ == "__main__":
-#     z = Zip()
-#
-#     assert z.is_available()
-#
-#     bf1 = Path("/tmp/bigfile.txt")
-#
-#     if not bf1.exists():
-#         with bf1.open("w") as f:
-#             f.write(
-#                 "x" * int(1e9)
-#             )
-#
-#     assert z.compress("/tmp/bigfile.txt", "/tmp/bigfile.txt.zip")
-#     assert z.decompress("/tmp/bigfile.txt.zip", "/tmp/bigfile.txt2")
-#     bf2 = Path("/tmp/bigfile.txt2")
-#     assert bf2.exists() and bf2.is_file()
-#     assert z.compress(".", "/tmp/thisdir.zip", level=9)
-#
-#     tmp = Path("/tmp/thisdir")
-#     assert z.decompress("/tmp/thisdir.zip", tmp)
-#     assert tmp.exists() and tmp.is_dir()
-#
-#     print('hurray')
+    @classmethod
+    def is_available(cls) -> bool:
+        try:
+            assert local["pigz"] and local["unpigz"]
+            return True
+        except CommandNotFound:
+            return False

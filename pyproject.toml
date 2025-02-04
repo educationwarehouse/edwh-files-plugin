@@ -38,6 +38,7 @@ dev = [
     # "python-semantic-release",
     "black",
     "pytest",
+    "pytest-coverage",
 ]
 
 [project.urls]
