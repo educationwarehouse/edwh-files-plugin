@@ -2,6 +2,7 @@ import json
 import shutil
 import sys
 import tempfile
+import typing
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,8 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncod
 from rich import print
 from threadful import thread
 from threadful.bonus import animate
+
+from edwh_files_plugin.compression import Compression
 
 DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
@@ -37,41 +40,64 @@ def create_callback(encoder: MultipartEncoder):
     return callback
 
 
-def upload_file(url: str, filename: str, filepath: Path, headers: Optional[dict] = None) -> requests.Response:
+# auto = best for directory; none for files
+# gzip: .tgz for directory; .gz for files. Pigz or Gzip based on availability
+CompressionTypes: typing.TypeAlias = typing.Literal["auto", "gzip", "zip"]
+
+
+def upload_file(
+    url: str,
+    filename: str,
+    filepath: Path,
+    headers: Optional[dict] = None,
+    compression: CompressionTypes = "auto",
+) -> requests.Response:
     """
     Upload a file to an url.
     """
     if headers is None:
         headers = {}
 
-    with filepath.open("rb") as f:
-        encoder = MultipartEncoder(
-            fields={
-                filename: (filename, f, "text/plain"),
-            }
-        )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if compression != "auto":
+            new_filepath = Path(tmpdir) / filepath.name
+            filename = compress_directory(
+                filepath, new_filepath, extension="gz" if compression == "gzip" else compression
+            )
+            filepath = new_filepath
 
-        monitor = MultipartEncoderMonitor(encoder, create_callback(encoder))
+        with filepath.open("rb") as f:
+            encoder = MultipartEncoder(
+                fields={
+                    filename: (filename, f, "text/plain"),
+                }
+            )
 
-        return requests.post(url, data=monitor, headers=headers | {"Content-Type": monitor.content_type})  # noqa
+            monitor = MultipartEncoderMonitor(encoder, create_callback(encoder))
+            return requests.post(url, data=monitor, headers=headers | {"Content-Type": monitor.content_type})  # noqa
 
 
 @thread()
-def _zip_directory(dir_path: str | Path, file_path: str | Path):
+def _compress_directory(dir_path: str | Path, file_path: str | Path, extension: CompressionTypes = "auto"):
     """
-    Compress a directory into a .zip file.
+    Compress a directory into a compressed (zip, gz) file.
     """
-    return shutil.make_archive(str(file_path), "zip", str(dir_path))
+    if extension == "auto":
+        compressor = Compression.best()
+    else:
+        compressor = Compression.for_extension(extension)
+
+    if compressor.compress(dir_path, file_path):
+        return compressor.filename(dir_path)
+    else:
+        raise RuntimeError("Something went wrong during compression!")
 
 
-def zip_directory(dir_path: str | Path, file_path: str | Path):
+def compress_directory(dir_path: str | Path, file_path: str | Path, extension: CompressionTypes = "auto"):
     """
-    Compress a directory into a .zip file and show a spinning animation.
+    Compress a directory into a compressed file (zip, gz) and show a spinning animation.
     """
-    return animate(_zip_directory(dir_path, file_path), text=f"Zipping directory {dir_path}")
-
-
-def find_best_available_compression() -> str: ...
+    return animate(_compress_directory(dir_path, file_path, extension), text=f"Compressing directory {dir_path}")
 
 
 def upload_directory(
@@ -79,7 +105,7 @@ def upload_directory(
     filepath: Path,
     headers: Optional[dict] = None,
     upload_filename: Optional[str] = None,
-    compression: Optional[str] = None,
+    compression: CompressionTypes = "auto",
 ):
     """
     Zip a directory and upload it to an url.
@@ -91,14 +117,16 @@ def upload_directory(
         upload_filename: by default, the directory name with compression extension (e.g. .gz, .zip) will be used
         compression: which method for compression to use (or best available by default)
     """
-    compression = compression or find_best_available_compression()
 
     filename = filepath.resolve().name
-    upload_filename = upload_filename or f"{filename}.zip"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # todo: use different options from 'compression'
-        archive_path = zip_directory(filepath, Path(tmpdir) / filename)
+        archive_path = Path(tmpdir) / filename
+        compressed_filename = compress_directory(
+            filepath, archive_path, extension="tgz" if compression == "gzip" else compression
+        )  # -> filename.zip e.g.
+
+        upload_filename = upload_filename or compressed_filename
 
         return upload_file(url, upload_filename, Path(archive_path), headers=headers)
 
@@ -112,7 +140,7 @@ def upload(
     max_days: Optional[int] = None,
     encrypt: Optional[str] = None,
     rename: Optional[str] = None,
-    compression: Optional[str] = None,
+    compression: CompressionTypes = "auto",  # auto | pigz | gzip | zip
 ):
     """
     Upload a file.
@@ -125,7 +153,7 @@ def upload(
         max_days (int): how many days can the file be downloaded?
         encrypt (str): encryption password
         rename (str): upload the file/folder with a different name than it currently has
-        compression (str): by default files are not compressed. For folders it will try pigz (.gz), gzip (.gz) then .zip.
+        compression (str): by default files are not compressed. For folders it will try pigz (.tgz), gzip (.tgz) then .zip.
                            You can also explicitly specify a compression method for files and directory, and nothing else will be tried.
     """
     headers: dict[str, str | int] = {}
@@ -164,7 +192,13 @@ def upload(
 
 
 @task(aliases=("get", "receive"))
-def download(_: Context, download_url: str, output_file: Optional[str | Path] = None, decrypt: Optional[str] = None):
+def download(
+    _: Context,
+    download_url: str,
+    output_file: Optional[str | Path] = None,
+    decrypt: Optional[str] = None,
+    unpack: bool = False,
+):
     """
     Download a file.
 
@@ -173,6 +207,7 @@ def download(_: Context, download_url: str, output_file: Optional[str | Path] = 
         download_url (str): file to download
         output_file (str): path to store the file in
         decrypt (str): decryption token
+        unpack (bool): unpack archive to file(s), removing the archive afterwards
     """
 
     # todo: add decompress option (pigz/gz/zip/auto/none) or ask
@@ -199,6 +234,9 @@ def download(_: Context, download_url: str, output_file: Optional[str | Path] = 
         for chunk in ChargingBar("Downloading", max=total).iter(response.iter_content(chunk_size=1024)):
             f.write(chunk)
 
+    if unpack:
+        do_unpack(_, str(output_file), remove=True)
+
 
 @task(aliases=("remove",))
 def delete(_: Context, deletion_url: str):
@@ -219,3 +257,17 @@ def delete(_: Context, deletion_url: str):
             "response": response.text.strip(),
         }
     )
+
+
+@task(name="unpack")
+def do_unpack(_: Context, filename: str, remove: bool = False):
+    filepath = Path(filename)
+    ext = filepath.suffix
+
+    compressor = Compression.for_extension(ext)
+
+    if compressor.decompress(filepath, filepath.with_suffix("")):
+        if remove:
+            filepath.unlink()
+    else:
+        print("[red] Something went wrong unpacking! [/red]")

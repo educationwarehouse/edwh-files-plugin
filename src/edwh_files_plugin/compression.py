@@ -29,12 +29,19 @@ def is_installed(program: str) -> bool:
 
 class Compression(abc.ABC):
     _registrations: dict[tuple[int, str], typing.Type[Self]] = {}
+    extension: str
 
-    def __init_subclass__(cls, extension: str = "", prio: int = 0):
+    def __init_subclass__(cls, extension: str | tuple[str, ...] = "", prio: int = 0):
         if not extension:
             warnings.warn("Defined compression algorithm without extension, it will be ignored.")
 
-        Compression._registrations[(prio, extension)] = cls
+        if isinstance(extension, str):
+            Compression._registrations[(prio, extension)] = cls
+        else:
+            for ext in extension:
+                Compression._registrations[(prio, ext)] = cls
+
+        cls.extension = extension
 
     @abc.abstractmethod
     def _compress(
@@ -117,9 +124,17 @@ class Compression(abc.ABC):
         """
         Find the best (by priority) available compression method for a specific extension (zip, gz).
         """
-        if registrations := cls.registrations(extension):
+        if registrations := cls.registrations(extension.strip(".").strip()):
             CompressionClass = registrations[0][1]
             return CompressionClass()
+
+    @classmethod
+    def filename(cls, filepath: str | Path):
+        """
+        Generate an output filename with the right extension
+        """
+        filepath = Path(filepath)
+        return filepath.with_suffix(f".{cls.extension}").name
 
 
 class Zip(Compression, extension="zip"):
@@ -204,7 +219,7 @@ class Zip(Compression, extension="zip"):
             return False
 
 
-class Gzip(Compression, extension="gz", prio=1):
+class Gzip(Compression, extension=("tgz", "gz"), prio=1):
     def gzip_compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar="tar", _gzip="gzip"
     ):
@@ -252,11 +267,8 @@ class Gzip(Compression, extension="gz", prio=1):
         if target.exists() and not overwrite:
             return False
 
-        try:
-            self.gzip_decompress(source, target)
-            return True
-        except Exception:
-            return False
+        self.gzip_decompress(source, target)
+        return True
 
     @classmethod
     def is_available(cls) -> bool:
@@ -266,29 +278,34 @@ class Gzip(Compression, extension="gz", prio=1):
         except CommandNotFound:
             return False
 
+    @classmethod
+    def filename(cls, filepath: str | Path):
+        """
+        Generate an output filename with the right extension
+        """
+        filepath = Path(filepath)
 
-class Pigz(Gzip, extension="gz", prio=2):
+        print(filepath, filepath.is_file())
+        extension = "gz" if filepath.is_file() else "tgz"
+        return filepath.with_suffix(f".{extension}").name
+
+
+class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
         if target.exists() and not overwrite:
             return False
 
-        try:
-            self.gzip_compress(source, target, _gzip="pigz")
-            return True
-        except Exception:
-            return False
+        self.gzip_compress(source, target, _gzip="pigz")
+        return True
 
     def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
         if target.exists() and not overwrite:
             return False
 
-        try:
-            self.gzip_decompress(source, target, _gunzip="unpigz")
-            return True
-        except Exception:
-            return False
+        self.gzip_decompress(source, target, _gunzip="unpigz")
+        return True
 
     @classmethod
     def is_available(cls) -> bool:
