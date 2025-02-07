@@ -4,3 +4,5 @@
 venv*
 dist/
 build/
+coverage.xml
+.coverage
