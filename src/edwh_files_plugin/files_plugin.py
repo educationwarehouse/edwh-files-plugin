@@ -117,7 +117,7 @@ def upload_directory(
         upload_filename: by default, the directory name with compression extension (e.g. .gz, .zip) will be used
         compression: which method for compression to use (or best available by default)
     """
-
+    filepath = filepath.expanduser().absolute()
     filename = filepath.resolve().name
 
     with tempfile.TemporaryDirectory() as tmpdir:
