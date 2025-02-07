@@ -4,10 +4,11 @@ import typing
 import warnings
 from pathlib import Path
 from subprocess import run
-from typing import Self
+from typing import Optional, Self
 
 from plumbum import local
 from plumbum.commands.processes import CommandNotFound
+from rich import print
 
 PathLike: typing.TypeAlias = str | Path
 
@@ -58,17 +59,31 @@ class Compression(abc.ABC):
         """
 
     def compress(
-        self, source: PathLike, target: PathLike, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
+        self,
+        source: PathLike,
+        target: Optional[PathLike] = None,
+        level: int = DEFAULT_COMPRESSION_LEVEL,
+        overwrite: bool = True,
     ) -> bool:
-        # todo: if target is a dir, derive a good name from the source
-        #       todo: target should be optional
+        source = Path(source).expanduser().absolute()
 
-        return self._compress(
-            Path(source),
-            Path(target),
-            level=level,
-            overwrite=overwrite,
-        )
+        if target is None:
+            target = self.filepath(source)
+            assert target != source, "Please provide a target file to compress to"
+        else:
+            target = Path(target)
+
+        try:
+            return self._compress(
+                source,
+                target,
+                level=level,
+                overwrite=overwrite,
+            )
+        except Exception as e:
+            print("[red] Something went wrong during compression [/red]")
+            print(e)
+            return False
 
     @abc.abstractmethod
     def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
@@ -81,12 +96,26 @@ class Compression(abc.ABC):
             overwrite (bool, optional): Whether to overwrite the target files if they already exist. Defaults to True.
         """
 
-    def decompress(self, source: PathLike, target: PathLike, overwrite: bool = True):
-        return self._decompress(
-            Path(source),
-            Path(target),
-            overwrite=overwrite,
-        )
+    def decompress(self, source: PathLike, target: Optional[PathLike] = None, overwrite: bool = True):
+        source = Path(source).expanduser().absolute()
+
+        if target is None:
+            # strip last extension (e.g. .tgz); retain other extension (.txt)
+            extension = ".".join(source.suffixes[:-1])
+            target = source.with_suffix(f".{extension}" if extension else "")
+        else:
+            target = Path(target)
+
+        try:
+            return self._decompress(
+                source,
+                target,
+                overwrite=overwrite,
+            )
+        except Exception as e:
+            print("[red] Something went wrong during decompression [/red]")
+            print(e)
+            return False
 
     @classmethod
     @abc.abstractmethod
@@ -129,12 +158,20 @@ class Compression(abc.ABC):
             return CompressionClass()
 
     @classmethod
-    def filename(cls, filepath: str | Path):
+    def filepath(cls, filepath: str | Path) -> Path:
+        """
+        Generate an output filepath with the right extension
+        """
+        filepath = Path(filepath)
+        extension = f".{filepath.suffix}.{cls.extension}" if filepath.is_file() else f".{cls.extension}"
+        return filepath.with_suffix(extension)
+
+    @classmethod
+    def filename(cls, filepath: str | Path) -> str:
         """
         Generate an output filename with the right extension
         """
-        filepath = Path(filepath)
-        return filepath.with_suffix(f".{cls.extension}").name
+        return cls.filepath(filepath).name
 
 
 class Zip(Compression, extension="zip"):
@@ -279,15 +316,10 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
             return False
 
     @classmethod
-    def filename(cls, filepath: str | Path):
-        """
-        Generate an output filename with the right extension
-        """
+    def filepath(cls, filepath: str | Path) -> Path:
         filepath = Path(filepath)
-
-        print(filepath, filepath.is_file())
-        extension = "gz" if filepath.is_file() else "tgz"
-        return filepath.with_suffix(f".{extension}").name
+        extension = f"{filepath.suffix}.gz" if filepath.is_file() else ".tgz"
+        return filepath.with_suffix(extension)
 
 
 class Pigz(Gzip, extension=("tgz", "gz"), prio=2):

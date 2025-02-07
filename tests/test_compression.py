@@ -1,5 +1,6 @@
 import io
 import tempfile
+from contextlib import chdir
 from pathlib import Path
 
 from edwh_files_plugin.compression import Compression, Gzip, Pigz, Zip, run_ok
@@ -107,3 +108,19 @@ def test_noop():
 def test_best():
     compressor = Compression.best()
     assert isinstance(compressor, Pigz)
+
+
+def test_compress_decompress_without_filename():
+    c = Compression.best()
+
+    with tempfile.TemporaryDirectory() as d, chdir(d):
+        p = Path(d)
+        t = p / "file.txt"
+        with open("file.txt", "w") as f:
+            f.write("--------------------")
+
+        assert c.compress(".")
+        assert c.compress(t)
+
+        assert c.decompress(p.with_suffix(".tgz"))
+        assert c.decompress(t.with_suffix(".txt.gz"))
