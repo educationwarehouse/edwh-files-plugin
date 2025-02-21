@@ -8,7 +8,7 @@ from typing import Optional, Self
 
 from plumbum import local
 from plumbum.commands.processes import CommandNotFound
-from rich import print
+from rich import print  # noqa: A004
 
 PathLike: typing.TypeAlias = str | Path
 
@@ -16,7 +16,7 @@ DEFAULT_COMPRESSION_LEVEL = 5
 
 
 def run_ok(command: str) -> bool:
-    with open(os.devnull, "w") as devnull:
+    with Path(os.devnull).open("w") as devnull:
         return run(command.split(" "), stdout=devnull, stderr=devnull).returncode == 0
 
 
@@ -30,7 +30,7 @@ def is_installed(program: str) -> bool:
 
 class Compression(abc.ABC):
     _registrations: dict[tuple[int, str], typing.Type[Self]] = {}
-    extension: str
+    extension: str | tuple[str, ...]
 
     def __init_subclass__(cls, extension: str | tuple[str, ...] = "", prio: int = 0):
         if not extension:
@@ -54,7 +54,8 @@ class Compression(abc.ABC):
         Args:
             source (Path): Path to the source file or directory to compress.
             target (Path): Path where the compressed file will be saved.
-            level (int, optional): Compression level (1-9), where higher numbers indicate higher compression. Defaults to 5.
+            level (int, optional): Compression level (1-9), where higher numbers indicate higher compression.
+                                   Defaults to 5.
             overwrite (bool, optional): Whether to overwrite the target file if it already exists. Defaults to True.
         """
 
@@ -96,7 +97,7 @@ class Compression(abc.ABC):
             overwrite (bool, optional): Whether to overwrite the target files if they already exist. Defaults to True.
         """
 
-    def decompress(self, source: PathLike, target: Optional[PathLike] = None, overwrite: bool = True):
+    def decompress(self, source: PathLike, target: Optional[PathLike] = None, overwrite: bool = True) -> bool:
         source = Path(source).expanduser().absolute()
 
         if target is None:
@@ -128,7 +129,9 @@ class Compression(abc.ABC):
         """
 
     @classmethod
-    def registrations(cls, extension_filter: str = None) -> list[tuple[tuple[int, str], typing.Type["Compression"]]]:
+    def registrations(
+        cls, extension_filter: Optional[str] = None
+    ) -> list[tuple[tuple[int, str], typing.Type["Compression"]]]:
         return sorted(
             (
                 (key, CompressionClass)
@@ -140,8 +143,8 @@ class Compression(abc.ABC):
         )
 
     @classmethod
-    def available(cls):
-        return set([extension for (_, extension) in cls._registrations.keys()])
+    def available(cls) -> set[str]:
+        return set([extension for (_, extension) in cls._registrations])
 
     @classmethod
     def best(cls) -> Self | None:
@@ -149,8 +152,10 @@ class Compression(abc.ABC):
         Find the absolute best (by priority) available compression method.
         """
         if registrations := cls.registrations():
-            CompressionClass = registrations[0][1]
-            return CompressionClass()
+            CompressionClass = registrations[0][1]  # noqa: N806
+            return typing.cast(Self, CompressionClass())
+
+        return None
 
     @classmethod
     def for_extension(cls, extension: str) -> Self | None:
@@ -158,8 +163,10 @@ class Compression(abc.ABC):
         Find the best (by priority) available compression method for a specific extension (zip, gz).
         """
         if registrations := cls.registrations(extension.strip(".").strip()):
-            CompressionClass = registrations[0][1]
-            return CompressionClass()
+            CompressionClass = registrations[0][1]  # noqa: N806
+            return typing.cast(Self, CompressionClass())
+
+        return None
 
     @classmethod
     def filepath(cls, filepath: str | Path) -> Path:
@@ -253,7 +260,7 @@ class Zip(Compression, extension="zip"):
     @classmethod
     def is_available(cls) -> bool:
         try:
-            import zipfile
+            import zipfile  # noqa: F401
 
             return True
         except ImportError:
@@ -262,8 +269,8 @@ class Zip(Compression, extension="zip"):
 
 class Gzip(Compression, extension=("tgz", "gz"), prio=1):
     def gzip_compress(
-        self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar="tar", _gzip="gzip"
-    ):
+        self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar: str = "tar", _gzip: str = "gzip"
+    ) -> bool:
         tar = local[_tar]
         gzip = local[_gzip]
 
@@ -290,19 +297,20 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
         except Exception:
             return False
 
-    def gzip_decompress(self, source: Path, target: Path, _tar="tar", _gunzip="gunzip"):
+    def gzip_decompress(self, source: Path, target: Path, _tar: str = "tar", _gunzip: str = "gunzip") -> bool:
         gunzip = local[_gunzip]
         tar = local[_tar]
 
         if ".tar" in source.suffixes or ".tgz" in source.suffixes:
             # tar gz
             target.mkdir(parents=True, exist_ok=True)
-            cmd = tar[f"-xvf", source, "--strip-components=1", f"--use-compress-program={_gunzip}", "-C", target]
+            cmd = tar["-xvf", source, "--strip-components=1", f"--use-compress-program={_gunzip}", "-C", target]
         else:
             # assume just a .gz
-            cmd = gunzip[f"-c", source] > str(target)
+            cmd = gunzip["-c", source] > str(target)
 
         cmd()
+        return True
 
     def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
         if target.exists() and not overwrite:
@@ -333,7 +341,7 @@ class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
         if target.exists() and not overwrite:
             return False
 
-        self.gzip_compress(source, target, _gzip="pigz")
+        self.gzip_compress(source, target, level=level, _gzip="pigz")
         return True
 
     def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:

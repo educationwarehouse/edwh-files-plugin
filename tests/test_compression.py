@@ -1,9 +1,8 @@
-import io
 import tempfile
 from contextlib import chdir
 from pathlib import Path
 
-from edwh_files_plugin.compression import Compression, Gzip, Pigz, Zip, run_ok
+from edwh_files_plugin.compression import Compression, Gzip, Pigz, Zip
 
 DATA = "x" * int(1e9)
 
@@ -63,36 +62,36 @@ def run_test_with_folder(compressor: Compression, extension: str, decompressor: 
 
 
 def test_zip():
-    zip = Compression.for_extension("zip")
-    assert isinstance(zip, Zip)
-    run_test_with_file(zip, "zip")
-    run_test_with_folder(zip, "zip")
+    zip_compression = Compression.for_extension("zip")
+    assert isinstance(zip_compression, Zip)
+    run_test_with_file(zip_compression, "zip")
+    run_test_with_folder(zip_compression, "zip")
 
 
 def test_gzip():
-    gz = Gzip()
-    assert isinstance(gz, Gzip)
-    run_test_with_file(gz, "gz")
-    run_test_with_folder(gz, "tgz")
-    run_test_with_folder(gz, "tar.gz")
+    gzip_compression = Gzip()
+    assert isinstance(gzip_compression, Gzip)
+    run_test_with_file(gzip_compression, "gz")
+    run_test_with_folder(gzip_compression, "tgz")
+    run_test_with_folder(gzip_compression, "tar.gz")
 
 
 def test_pigz():
-    pigz = Compression.for_extension("gz")
-    assert isinstance(pigz, Pigz)  # pigz > gz
-    run_test_with_file(pigz, "gz")
-    run_test_with_folder(pigz, "tgz")
-    run_test_with_folder(pigz, "tar.gz")
+    pigz_compression = Compression.for_extension("gz")
+    assert isinstance(pigz_compression, Pigz)  # pigz > gz
+    run_test_with_file(pigz_compression, "gz")
+    run_test_with_folder(pigz_compression, "tgz")
+    run_test_with_folder(pigz_compression, "tar.gz")
 
 
 def test_gzip_pigz_cross():
-    gz = Gzip()
-    pigz = Pigz()
-    run_test_with_file(pigz, "gz", decompressor=gz)
-    run_test_with_folder(pigz, "tgz", decompressor=gz)
+    gz_compression = Gzip()
+    pigz_compression = Pigz()
+    run_test_with_file(pigz_compression, "gz", decompressor=gz_compression)
+    run_test_with_folder(pigz_compression, "tgz", decompressor=gz_compression)
 
-    run_test_with_file(gz, "gz", decompressor=pigz)
-    run_test_with_folder(gz, "tgz", decompressor=pigz)
+    run_test_with_file(gz_compression, "gz", decompressor=pigz_compression)
+    run_test_with_folder(gz_compression, "tgz", decompressor=pigz_compression)
 
 
 def test_noop():
@@ -116,8 +115,7 @@ def test_compress_decompress_without_filename():
     with tempfile.TemporaryDirectory() as d, chdir(d):
         p = Path(d)
         t = p / "file.txt"
-        with open("file.txt", "w") as f:
-            f.write("--------------------")
+        t.write_text("--------------------")
 
         assert c.compress(".")
         assert c.compress(t)
