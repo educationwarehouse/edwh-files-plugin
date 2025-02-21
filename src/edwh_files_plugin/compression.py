@@ -140,6 +140,10 @@ class Compression(abc.ABC):
         )
 
     @classmethod
+    def available(cls):
+        return set([extension for (_, extension) in cls._registrations.keys()])
+
+    @classmethod
     def best(cls) -> Self | None:
         """
         Find the absolute best (by priority) available compression method.
@@ -163,7 +167,7 @@ class Compression(abc.ABC):
         Generate an output filepath with the right extension
         """
         filepath = Path(filepath)
-        extension = f".{filepath.suffix}.{cls.extension}" if filepath.is_file() else f".{cls.extension}"
+        extension = f"{filepath.suffix}.{cls.extension}" if filepath.is_file() else f".{cls.extension}"
         return filepath.with_suffix(extension)
 
     @classmethod

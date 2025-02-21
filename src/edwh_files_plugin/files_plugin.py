@@ -86,6 +86,10 @@ def _compress_directory(dir_path: str | Path, file_path: str | Path, extension: 
         compressor = Compression.best()
     else:
         compressor = Compression.for_extension(extension)
+    if not compressor:
+        print(f"[red] No compression available for {extension} [/red]")
+        print(f"[blue] Please choose one of : {Compression.available()}[/blue]")
+        raise RuntimeError("Something went wrong during compression!")
 
     if compressor.compress(dir_path, file_path):
         return compressor.filename(dir_path)
@@ -169,10 +173,14 @@ def upload(
 
     filepath = Path(filename)
 
-    if filepath.is_dir():
-        response = upload_directory(url, filepath, headers, upload_filename=rename, compression=compression)
-    else:
-        response = upload_file(url, rename or str(filename), filepath, headers, compression=compression)
+    try:
+        if filepath.is_dir():
+            response = upload_directory(url, filepath, headers, upload_filename=rename, compression=compression)
+        else:
+            response = upload_file(url, rename or str(filename), filepath, headers, compression=compression)
+    except RuntimeError as e:
+        print(f"[red] {e} [/red]")
+        exit(1)
 
     download_url = response.text.strip()
     delete_url = response.headers.get("x-url-delete")
@@ -209,8 +217,6 @@ def download(
         decrypt (str): decryption token
         unpack (bool): unpack archive to file(s), removing the archive afterwards
     """
-
-    # todo: add decompress option (pigz/gz/zip/auto/none) or ask
 
     if output_file is None:
         output_file = download_url.split("/")[-1]
@@ -266,7 +272,7 @@ def do_unpack(_: Context, filename: str, remove: bool = False):
 
     compressor = Compression.for_extension(ext)
 
-    if compressor.decompress(filepath, filepath.with_suffix("")):
+    if compressor and compressor.decompress(filepath, filepath.with_suffix("")):
         if remove:
             filepath.unlink()
     else:
