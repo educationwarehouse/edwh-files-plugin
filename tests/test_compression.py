@@ -1,13 +1,14 @@
 import tempfile
+import typing as t
 from contextlib import chdir
 from pathlib import Path
 
-from edwh_files_plugin.compression import Compression, Gzip, Pigz, Zip
+from edwh_files_plugin.compression import Compression, Gzip, Nocompression, Pigz, Zip
 
 DATA = "x" * int(1e9)
 
 
-def run_test_with_file(compressor: Compression, extension: str, decompressor: Compression = None):
+def run_test_with_file(compressor: Compression, extension: str, decompressor: t.Optional[Compression] = None):
     decompressor = decompressor or compressor
     assert compressor.is_available()
     assert decompressor.is_available()
@@ -30,7 +31,7 @@ def run_test_with_file(compressor: Compression, extension: str, decompressor: Co
         assert unzipped.read_text() == DATA
 
 
-def run_test_with_folder(compressor: Compression, extension: str, decompressor: Compression = None):
+def run_test_with_folder(compressor: Compression, extension: str, decompressor: t.Optional[Compression] = None):
     decompressor = decompressor or compressor
     assert compressor.is_available()
     assert decompressor.is_available()
@@ -102,6 +103,54 @@ def test_noop():
     assert not Noop.is_available()
 
     assert not Compression.for_extension("fake")
+
+
+def test_nocompression():
+    compressor = Nocompression()
+
+    # test file:
+    assert compressor.is_available()
+
+    with tempfile.TemporaryDirectory(prefix="pytest_file") as d:
+        dir_path = Path(d)
+        bigfile = dir_path / "myfile.txt"
+        bigfile.write_text(DATA)
+
+        lilfile = dir_path / f"myfile.txt"
+
+        assert compressor.compress(bigfile)
+
+        assert lilfile.exists()
+        assert lilfile.stat().st_size == bigfile.stat().st_size
+
+        unzipped = dir_path / "myfile.txt"
+        assert compressor.decompress(lilfile)
+
+        assert unzipped.read_text() == DATA
+
+    # test folder:
+    with tempfile.TemporaryDirectory(prefix="pytest_folder") as d:
+        parent_d = Path(d)
+        child_d = parent_d / "somefolder"
+        child_d.mkdir()
+
+        bigfile = child_d / "raw.txt"
+        bigfile.write_text(DATA)
+
+        file2 = child_d / "small.txt"
+        file2.write_text("-")
+
+        lilfile = parent_d / f"somefolder.tar"
+
+        assert compressor.compress(child_d)
+
+        assert lilfile.exists()
+
+        unzipped_d = parent_d / "somefolder"
+        assert compressor.decompress(lilfile)
+
+        unzipped = unzipped_d / "raw.txt"
+        assert unzipped.read_text() == DATA
 
 
 def test_best():

@@ -1,5 +1,6 @@
 import abc
 import os
+import shutil
 import typing
 import warnings
 from pathlib import Path
@@ -88,7 +89,7 @@ class Compression(abc.ABC):
 
         if target is None:
             target = self.filepath(source)
-            assert target != source, "Please provide a target file to compress to"
+            # assert target != source, "Please provide a target file to compress to"
         else:
             target = Path(target)
 
@@ -118,10 +119,12 @@ class Compression(abc.ABC):
     def decompress(self, source: PathLike, target: Optional[PathLike] = None, overwrite: bool = True) -> bool:
         source = Path(source).expanduser().absolute()
 
-        if target is None:
+        if target is None and source.suffix in (".tgz", ".tar", ".gz", ".zip"):
             # strip last extension (e.g. .tgz); retain other extension (.txt)
             extension = ".".join(source.suffixes[:-1])
             target = source.with_suffix(f".{extension}" if extension else "")
+        elif target is None:
+            target = source
         else:
             target = Path(target)
 
@@ -203,9 +206,46 @@ class Compression(abc.ABC):
         return cls.filepath(filepath).name
 
 
+class Nocompression(Compression, extension=("none", "tar"), prio=0):
+    def _compress(
+        self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
+    ) -> bool:
+        if source.is_dir():
+            tar = local["tar"]
+            cmd = tar["-cf", "-", "-C", source.parent, source.name] > str(target)
+            cmd()
+        elif source != target:
+            shutil.copyfile(source, target)
+        # else: nothing to do
+
+        return True
+
+    def _decompress(self, source: Path, target: Path, overwrite: bool = True) -> bool:
+        if source.suffix == ".tar":
+            target.mkdir(exist_ok=True)
+            tar = local["tar"]
+            cmd = tar["-xvf", source, "--strip-components=1", "-C", target]
+            cmd()
+        elif source != target:
+            shutil.copyfile(source, target)
+        # else: nothing to do
+
+        return True
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
+    @classmethod
+    def filepath(cls, filepath: str | Path) -> Path:
+        filepath = Path(filepath)
+        if filepath.is_dir():
+            return filepath.with_suffix(".tar")
+        else:
+            return filepath
+
+
 class Zip(Compression, extension="zip"):
-
-
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
@@ -288,8 +328,6 @@ class Zip(Compression, extension="zip"):
 
 
 class Gzip(Compression, extension=("tgz", "gz"), prio=1):
-
-
     def gzip_compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar: str = "tar", _gzip: str = "gzip"
     ) -> bool:

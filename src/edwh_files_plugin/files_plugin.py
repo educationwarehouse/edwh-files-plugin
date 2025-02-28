@@ -73,8 +73,8 @@ def create_callback(encoder: MultipartEncoder) -> typing.Callable[[MultipartEnco
 
 # auto = best for directory; none for files
 # gzip: .tgz for directory; .gz for files. Pigz or Gzip based on availability
-FullCompressionTypes: typing.TypeAlias = typing.Literal["auto", "gzip", "zip", "tgz", "gz"]
-CliCompressionTypes: typing.TypeAlias = typing.Literal["auto", "gzip", "zip"]
+FullCompressionTypes: typing.TypeAlias = typing.Literal["auto", "gzip", "zip", "tgz", "gz", "none"]
+CliCompressionTypes: typing.TypeAlias = typing.Literal["auto", "gzip", "zip", "none"]
 
 
 def upload_file(
