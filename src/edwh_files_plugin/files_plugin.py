@@ -17,7 +17,7 @@ from rich import print  # noqa: A004
 from threadful import thread
 from threadful.bonus import animate
 
-from edwh_files_plugin.compression import Compression
+from edwh_files_plugin.compression import DEFAULT_COMPRESSION_LEVEL, Compression
 
 DEFAULT_TRANSFERSH_SERVER = "https://files.edwh.nl"
 
@@ -83,6 +83,7 @@ def upload_file(
     filepath: Path,
     headers: Optional[dict[str, typing.Any]] = None,
     compression: FullCompressionTypes = "auto",
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> requests.Response:
     """
     Upload a file to an url.
@@ -94,7 +95,10 @@ def upload_file(
         if compression != "auto":
             new_filepath = Path(tmpdir) / filepath.name
             filename = compress_directory(
-                filepath, new_filepath, extension="gz" if compression == "gzip" else compression
+                filepath,
+                new_filepath,
+                extension="gz" if compression == "gzip" else compression,
+                compression_level=compression_level,
             )
             filepath = new_filepath
 
@@ -110,7 +114,12 @@ def upload_file(
 
 
 @thread()
-def _compress_directory(dir_path: str | Path, file_path: str | Path, extension: FullCompressionTypes = "auto") -> str:
+def _compress_directory(
+    dir_path: str | Path,
+    file_path: str | Path,
+    extension: FullCompressionTypes = "auto",
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+) -> str:
     """
     Compress a directory into a compressed (zip, gz) file.
     """
@@ -121,17 +130,25 @@ def _compress_directory(dir_path: str | Path, file_path: str | Path, extension: 
         print(f"[blue] Please choose one of : {Compression.available()}[/blue]")
         raise RuntimeError("Something went wrong during compression!")
 
-    if compressor.compress(dir_path, file_path):
+    if compressor.compress(dir_path, file_path, level=compression_level):
         return compressor.filename(dir_path)
     else:
         raise RuntimeError("Something went wrong during compression!")
 
 
-def compress_directory(dir_path: str | Path, file_path: str | Path, extension: FullCompressionTypes = "auto") -> str:
+def compress_directory(
+    dir_path: str | Path,
+    file_path: str | Path,
+    extension: FullCompressionTypes = "auto",
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+) -> str:
     """
     Compress a directory into a compressed file (zip, gz) and show a spinning animation.
     """
-    return animate(_compress_directory(dir_path, file_path, extension), text=f"Compressing directory {dir_path}")
+    return animate(
+        _compress_directory(dir_path, file_path, extension, compression_level=compression_level),
+        text=f"Compressing directory {dir_path}",
+    )
 
 
 def upload_directory(
@@ -140,6 +157,7 @@ def upload_directory(
     headers: Optional[dict[str, typing.Any]] = None,
     upload_filename: Optional[str] = None,
     compression: FullCompressionTypes = "auto",
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> requests.Response:
     """
     Zip a directory and upload it to an url.
@@ -150,6 +168,7 @@ def upload_directory(
         headers: upload options
         upload_filename: by default, the directory name with compression extension (e.g. .gz, .zip) will be used
         compression: which method for compression to use (or best available by default)
+        compression_level: The compression level is a measure of the compression quality (file size; int 0 - 9).
     """
     filepath = filepath.expanduser().absolute()
     filename = filepath.resolve().name
@@ -157,12 +176,17 @@ def upload_directory(
     with tempfile.TemporaryDirectory() as tmpdir:
         archive_path = Path(tmpdir) / filename
         compressed_filename = compress_directory(
-            filepath, archive_path, extension="tgz" if compression == "gzip" else compression
+            filepath,
+            archive_path,
+            extension="tgz" if compression == "gzip" else compression,
+            compression_level=compression_level,
         )  # -> filename.zip e.g.
 
         upload_filename = upload_filename or compressed_filename
 
-        return upload_file(url, upload_filename, Path(archive_path), headers=headers)
+        return upload_file(
+            url, upload_filename, Path(archive_path), headers=headers, compression_level=compression_level
+        )
 
 
 @task(aliases=("add", "send"))
@@ -175,6 +199,7 @@ def upload(
     encrypt: Optional[str] = None,
     rename: Optional[str] = None,
     compression: CliCompressionTypes = "auto",  # auto | pigz | gzip | zip
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> None:
     """
     Upload a file.
@@ -191,6 +216,11 @@ def upload(
                            For folders it will try pigz (.tgz), gzip (.tgz) then .zip.
                            You can also explicitly specify a compression method for files and directory,
                            and nothing else will be tried.
+        compression_level (int): The compression level is a measure of the compression quality (file size).
+                                 It is expressed as an integer in the range 1 - 9.
+                                 Compression quality and performance are conflicting goals.
+                                 Compression level 1 provides best performance at the expense of quality.
+                                 Compression level 9 provides the smallest file size.
     """
     headers: dict[str, str | int] = {}
 
@@ -207,9 +237,23 @@ def upload(
 
     try:
         if filepath.is_dir():
-            response = upload_directory(url, filepath, headers, upload_filename=rename, compression=compression)
+            response = upload_directory(
+                url,
+                filepath,
+                headers,
+                upload_filename=rename,
+                compression=compression,
+                compression_level=compression_level,
+            )
         else:
-            response = upload_file(url, rename or str(filename), filepath, headers, compression=compression)
+            response = upload_file(
+                url,
+                rename or str(filename),
+                filepath,
+                headers,
+                compression=compression,
+                compression_level=compression_level,
+            )
     except RuntimeError as e:
         print(f"[red] {e} [/red]")
         exit(1)
