@@ -37,6 +37,8 @@ dev = [
     "hatch",
     # "python-semantic-release",
     "black",
+    "pytest",
+    "pytest-coverage",
 ]
 
 [project.urls]
@@ -116,32 +118,37 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "A",
-    "ARG",
-    "B",
-    "C",
-    "DTZ",
-    "E",
-    "EM",
-    "F",
-    "FBT",
-    "I",
-    "ICN",
-    "ISC",
-    "N",
-    "PLC",
-    "PLE",
-    "PLR",
-    "PLW",
-    "Q",
-    "RUF",
-    "S",
-    "T",
-    "TID",
-    "UP",
-    "W",
-    "YTT",
+    "F", # pyflake error
+    "E", # pycodestyle error
+    "W", # pycodestyle warning
+    "Q", # quotes
+    "A", # builtins
+    # "C4", # comprehensions
+    # "RET", # return
+    "SIM", # simplify
+    "ARG", # unused arguments
+    # "COM", # comma's
+    "PTH", # use pathlib
+    "RUF", # ruff rules
+    "C90", # mccabe (complexity)
+    #    "I", # isort
+    "N", # pep-8 naming
+    # "D", # pydocstyle
+    # "UP", # pyupgrade
+    "YTT", # flake8-2020 (version hardcoding)
+    # "ANN", # annotations - werkt niet goed samen met invoke
+    # "ASYNC", # async - gebruiken we hier niet
+    # "S", # bandit (security)
+    # "BLE", # blind except
+    # "FBT", # boolean trap
+    # "B", # bugbear
+    # "DTZ", # datetimes
+    # "T10", # debugger
+    # "DJ", # django
+    # "ISC", # implicit string concat (handig voor als je een , mist in een lijst bijv.)
+    "SIM", # simplify
 ]
+
 ignore = [
     # Allow non-abstract empty methods in abstract base classes
     "B027",
@@ -152,7 +159,9 @@ ignore = [
     # Ignore complexity
     "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004",
     # Optional[]
-    "UP007"
+    "UP007",
+    # ClassVar:
+    "RUF012"
 ]
 unfixable = [
     # Don't touch unused imports

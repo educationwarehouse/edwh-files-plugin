@@ -1,5 +1,8 @@
 *.pyc
 .idea
+.env
 venv*
 dist/
 build/
+coverage.xml
+.coverage
