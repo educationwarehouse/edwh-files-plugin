@@ -30,6 +30,38 @@ def require_protocol(url: str) -> str:
 
 
 def create_callback(encoder: MultipartEncoder) -> typing.Callable[[MultipartEncoderMonitor], None]:
+    """
+    Creates a callback function for monitoring the progress of an upload.
+
+    Args:
+        encoder (MultipartEncoder): The multipart encoder that is uploading the data.
+
+    Returns:
+        A callback function that updates a progress bar based on the amount of data that has been read by the encoder.
+
+    Example:
+
+        import requests
+        from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncoderMonitor
+
+        def my_callback(monitor: MultipartEncoder):
+            print('bytes sent: {0}'.format(monitor.bytes_read))
+
+        filename = 'my_file.txt'
+
+        with open(filename, 'rb') as f:
+            encoder = MultipartEncoder(
+                fields={
+                    'file': (filename, f, "text/plain"),
+                }
+            )
+
+        monitor = MultipartEncoderMonitor(encoder, my_callback)
+        result = requests.post('http://some-url.com/upload',
+                               data=monitor,
+                               headers={'Content-Type': monitor.content_type})
+
+    """
     bar = ChargingBar("Uploading", max=encoder.len)
 
     def callback(monitor: MultipartEncoderMonitor) -> None:
@@ -217,7 +249,6 @@ def download(
         decrypt (str): decryption token
         unpack (bool): unpack archive to file(s), removing the archive afterwards
     """
-
     if output_file is None:
         output_file = download_url.split("/")[-1]
     output_path = Path(output_file)
@@ -268,6 +299,18 @@ def delete(_: Context, deletion_url: str) -> None:
 
 @task(name="unpack")
 def do_unpack(_: Context, filename: str, remove: bool = False) -> None:
+    """
+    Decompress a given file.
+
+    Args:
+        _: invoke Context
+        filename (str): Path of the file to be decompressed
+        remove (bool, optional): If True, original compressed file will be deleted after decompression.
+                                 Defaults to False.
+
+    Returns:
+        None
+    """
     filepath = Path(filename)
     ext = filepath.suffix
 

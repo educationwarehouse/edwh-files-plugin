@@ -16,11 +16,29 @@ DEFAULT_COMPRESSION_LEVEL = 5
 
 
 def run_ok(command: str) -> bool:
+    """
+    Executes a command and returns whether it ended successfully (with return code 0).
+
+    Args:
+        command (str): The command to run.
+
+    Returns:
+        bool: True if the command ended successfully, False otherwise.
+    """
     with Path(os.devnull).open("w") as devnull:
         return run(command.split(" "), stdout=devnull, stderr=devnull).returncode == 0
 
 
 def is_installed(program: str) -> bool:
+    """
+    Checks if a given program is installed on the system.
+
+    Args:
+        program (str): The name of the program to check.
+
+    Returns:
+        bool: True if the program is installed, False otherwise.
+    """
     return run_ok(f"which {program}")
 
 
@@ -186,6 +204,8 @@ class Compression(abc.ABC):
 
 
 class Zip(Compression, extension="zip"):
+
+
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
@@ -268,9 +288,27 @@ class Zip(Compression, extension="zip"):
 
 
 class Gzip(Compression, extension=("tgz", "gz"), prio=1):
+
+
     def gzip_compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, _tar: str = "tar", _gzip: str = "gzip"
     ) -> bool:
+        """
+        Compress data using gzip.
+
+        This function compresses data from a source to a target path using the gzip tool.
+
+        Args:
+            source (Path): Path to the file or data to be compressed.
+            target (Path): Path where the compressed data will be saved.
+            level (int): compression level, where 0 is fastest and 9 is strongest but slowest.
+                Defaults to DEFAULT_COMPRESSION_LEVEL.
+            _tar (str): For internal usage
+            _gzip (str): For internal usage
+
+        Returns:
+            bool: True if compression was successful, False on any failure.
+        """
         tar = local[_tar]
         gzip = local[_gzip]
 
@@ -298,6 +336,16 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
             return False
 
     def gzip_decompress(self, source: Path, target: Path, _tar: str = "tar", _gunzip: str = "gunzip") -> bool:
+        """
+        Decompresses a gzipped file and extracts it into the specified target directory.
+
+        Args:
+            source (Path): The path to the gzipped file.
+            target (Path): The directory to extract the decompressed file(s) to.
+
+        Returns:
+            bool: True if the decompression and extraction were successful, False otherwise.
+        """
         gunzip = local[_gunzip]
         tar = local[_tar]
 
@@ -321,6 +369,13 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
 
     @classmethod
     def is_available(cls) -> bool:
+        """
+        Check if 'gzip' and 'gunzip' are available in the local context.
+
+        Returns:
+            bool: The return value is True if 'gzip' and 'gunzip' are found,
+                  False otherwise.
+        """
         try:
             assert local["gzip"] and local["gunzip"]
             return True
@@ -329,12 +384,41 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
 
     @classmethod
     def filepath(cls, filepath: str | Path) -> Path:
+        """
+        Return a Path object with either '.gz' or '.tgz' appended as file extension based on whether
+        the provided file path is a file or not.
+
+        Args:
+            filepath (str | Path): The input file path in string or Path format.
+
+        Returns:
+            Path: The updated file path with appended file extension.
+        """
         filepath = Path(filepath)
         extension = f"{filepath.suffix}.gz" if filepath.is_file() else ".tgz"
         return filepath.with_suffix(extension)
 
 
 class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
+    """
+    The Pigz class inherits from the Gzip base class.
+
+    Its priority is higher than that of the base class, as indicated by the value 2.
+
+    Pigz (Parallel Implementation of GZip) is a fully functional replacement for gzip
+    that exploits multiple processors and multiple cores to the hilt when compressing data.
+    Pigz can be a good choice when you're handling large amounts of data,
+    and your machine has multiple cores/processors.
+
+    Advantages of pigz over classic gzip:
+    - Multithreading: Pigz can split the input data into chunks and process them in parallel.
+                      This utilizes multiple cores on your machine,
+    leading to faster compression times.
+    - Compatibility: Pigz maintains backward compatibility with gzip, so it can handle any file that gzip can.
+    - Speed: In multi-core systems, pigz can be significantly faster than gzip
+             because of its ability to process different parts of the data simultaneously.
+    """
+
     def _compress(
         self, source: Path, target: Path, level: int = DEFAULT_COMPRESSION_LEVEL, overwrite: bool = True
     ) -> bool:
@@ -353,6 +437,12 @@ class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
 
     @classmethod
     def is_available(cls) -> bool:
+        """
+        Check if 'pigz' and 'unpigz' commands are available in the local environment.
+
+        Returns:
+            bool: The return value. True for success, False otherwise.
+        """
         try:
             assert local["pigz"] and local["unpigz"]
             return True
