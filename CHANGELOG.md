@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.1.0 (2025-02-28)
+
+### Feature
+
+* Allow specifying compression level on `file.upload` ([`511d1b1`](https://github.com/educationwarehouse/edwh-files-plugin/commit/511d1b19a3a5bcdbeececd3d97751c1376ec0bd0))
+
 ## v1.0.0 (2025-02-28)
 
 ### Feature
