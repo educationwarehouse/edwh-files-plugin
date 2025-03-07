@@ -1,6 +1,7 @@
 import abc
 import os
 import shutil
+import sys
 import typing
 import warnings
 from pathlib import Path
@@ -437,6 +438,18 @@ class Gzip(Compression, extension=("tgz", "gz"), prio=1):
         return filepath.with_suffix(extension)
 
 
+def print_once(msg: str, _seen=set(), **print_kwargs):
+    """
+    Print out a message and remember which messages you've seen
+    to prevent duplicate messages from being printed.
+    """
+    if msg in _seen:
+        return
+
+    print(msg, **print_kwargs)
+    _seen.add(msg)
+
+
 class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
     """
     The Pigz class inherits from the Gzip base class.
@@ -485,4 +498,7 @@ class Pigz(Gzip, extension=("tgz", "gz"), prio=2):
             assert local["pigz"] and local["unpigz"]
             return True
         except CommandNotFound:
+            print_once(
+                "[yellow]WARN: pigz isn't available! You're missing out on performance[/yellow]", file=sys.stderr
+            )
             return False
