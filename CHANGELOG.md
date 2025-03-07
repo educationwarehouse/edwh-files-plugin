@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.1.1 (2025-03-07)
+
+### Fix
+
+* Show message if `pigz` is not available, warning the user about missing out on performance (once) ([`976b778`](https://github.com/educationwarehouse/edwh-files-plugin/commit/976b778abfeb79a13b7e9a0b6886b1c1a6dba4ce))
+
 ## v1.1.0 (2025-02-28)
 
 ### Feature
