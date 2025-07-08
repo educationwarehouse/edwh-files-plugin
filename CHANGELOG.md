@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.2.0 (2025-07-08)
+
+### Feature
+
+* Create subcommand for a temporary file upload ([`26aab2b`](https://github.com/educationwarehouse/edwh-files-plugin/commit/26aab2b6eced16d66888e19f0fc7317aa49889a5))
+
 ## v1.1.1 (2025-03-07)
 
 ### Fix
