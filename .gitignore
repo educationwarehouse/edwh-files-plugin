@@ -6,3 +6,4 @@ dist/
 build/
 coverage.xml
 .coverage
+uv.lock
